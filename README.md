@@ -1,78 +1,330 @@
 # Archivist Media API
 
-Archivist is a small FastAPI service for storing meeting videos and returning clickable frame-image URLs for requested timestamps.
+Archivist is a deployed API for uploading meeting videos and pulling still images from those videos by timestamp.
 
-The first production deployment is running on the DigitalOcean VM at:
+The core workflow is:
+
+```text
+Upload MP4 video -> receive videoId -> list videos when needed -> request frame by videoId + timestamp -> open returned frameUrl
+```
+
+Production base URL:
 
 ```text
 https://206-189-199-110.sslip.io/archivist
 ```
 
-## What It Does
-
-- Accepts MP4 meeting-video uploads from an AI automation or operator.
-- Stores original videos on the VM filesystem.
-- Stores video and frame metadata in Postgres.
-- Extracts JPEG frames with `ffmpeg` when given a `videoId` and timestamp.
-- Returns a public/clickable frame URL.
-- Keeps upload and frame-generation endpoints protected with a bearer token.
-
-## API
+API base URL:
 
 ```text
-GET  /archivist/api/health
-GET  /archivist/api/videos
-POST /archivist/api/videos
-GET  /archivist/api/videos/{videoId}/frame?timestamp=HH:MM:SS
-GET  /archivist/api/media/frames/{videoId}/{timestampMs}.jpg
+https://206-189-199-110.sslip.io/archivist/api
 ```
 
-## Find A Video ID
+## What This System Does
 
-Before requesting a frame, list the uploaded videos and choose the matching `videoId` from the metadata:
+- Stores meeting videos uploaded as `.mp4` files.
+- Generates a stable `videoId` for each uploaded video.
+- Lists uploaded videos with enough metadata to identify the right `videoId`.
+- Extracts a JPEG frame from a video at a requested timestamp.
+- Returns a clickable `frameUrl` that can be opened in a browser.
+- Stores metadata in Postgres.
+- Stores original videos and generated frames on the VM filesystem.
+
+## Authentication Rules
+
+```text
+Public / no token required:
+GET /videos
+GET /media/frames/{videoId}/{frameFile}
+
+Bearer token required:
+POST /videos
+GET /videos/{videoId}/frame
+```
+
+`GET /videos` is public because it only returns lookup metadata so users can find the right `videoId`.
+
+Uploading videos and generating frame URLs require:
+
+```text
+Authorization: Bearer <ARCHIVIST_API_TOKEN>
+```
+
+The real token is stored in `.env` on the local machine and on the VM. Do not commit or paste the real token into GitHub.
+
+## Endpoints
+
+```text
+GET  /health
+GET  /videos
+POST /videos
+GET  /videos/{videoId}/frame?timestamp=HH:MM:SS
+GET  /media/frames/{videoId}/{timestampMs}.jpg
+```
+
+When using the production deployment, prefix these paths with:
+
+```text
+https://206-189-199-110.sslip.io/archivist/api
+```
+
+## 1. Check Health
+
+Use this to confirm the API is online:
+
+```bash
+curl "https://206-189-199-110.sslip.io/archivist/api/health"
+```
+
+Expected response:
+
+```json
+{
+  "ok": true,
+  "service": "archivist-api"
+}
+```
+
+## 2. Find A Video ID
+
+Before requesting a frame, list uploaded videos and choose the matching `videoId`.
 
 ```bash
 curl "https://206-189-199-110.sslip.io/archivist/api/videos?limit=50"
 ```
 
-Each item includes:
+Example response:
 
-```text
-videoId
-canonicalName
-displayName
-originalFilename
-meetingDate
-source
-uploadedBy
-status
-createdAt
+```json
+[
+  {
+    "videoId": "vid_01M0TP1NKCFMAWPAQZ09PKN23S",
+    "canonicalName": "2026-08-21-ch-des-archivist",
+    "displayName": "CH_Des Archivist",
+    "originalFilename": "260821 CH_Des Archivist - video.mp4",
+    "meetingDate": "2026-08-21",
+    "source": "downloaded-video",
+    "uploadedBy": "Kwaku",
+    "status": "ready",
+    "createdAt": "2026-08-24T20:03:00Z"
+  }
+]
 ```
 
-## Upload Example
+Use these fields to match the right video:
+
+```text
+videoId           Unique ID used for frame requests
+canonicalName     Normalized searchable name
+displayName       Human-readable title
+originalFilename  Original uploaded file name
+meetingDate       Meeting date if supplied
+source            Where the video came from
+uploadedBy        Person or automation that uploaded it
+status            ready, uploading, or failed
+createdAt         Upload record creation time
+```
+
+`limit` is optional. It defaults to `50` and can be between `1` and `200`.
+
+## 3. Upload An MP4 Video
+
+Only `.mp4` files are accepted.
 
 ```bash
+export ARCHIVIST_API_TOKEN="PASTE_TOKEN_HERE"
+
 curl -H "Authorization: Bearer $ARCHIVIST_API_TOKEN" \
   -F "meetingTitle=CH_Des Archivist" \
   -F "meetingDate=2026-08-21" \
   -F "source=box-download" \
   -F "uploadedBy=Kwaku" \
-  -F "file=@meeting.mp4;type=video/mp4" \
-  https://206-189-199-110.sslip.io/archivist/api/videos
+  -F "file=@/path/to/meeting.mp4;type=video/mp4" \
+  "https://206-189-199-110.sslip.io/archivist/api/videos"
 ```
 
-## Frame Example
+Required form field:
+
+```text
+file  MP4 video file
+```
+
+Optional form fields:
+
+```text
+meetingTitle  Human-readable meeting title
+meetingDate   YYYY-MM-DD
+source        Where the file came from, such as box-download, zoom, drive, or automation
+uploadedBy    Person or automation that uploaded the file
+```
+
+Example upload response:
+
+```json
+{
+  "videoId": "vid_01M0TP1NKCFMAWPAQZ09PKN23S",
+  "canonicalName": "2026-08-21-ch-des-archivist",
+  "displayName": "CH_Des Archivist",
+  "status": "ready"
+}
+```
+
+Save the `videoId`. If you lose it, call `GET /videos` to find it again.
+
+## 4. Request A Frame URL
+
+After a video is uploaded, request a frame with the `videoId` and timestamp.
 
 ```bash
 curl -H "Authorization: Bearer $ARCHIVIST_API_TOKEN" \
-  "https://206-189-199-110.sslip.io/archivist/api/videos/{videoId}/frame?timestamp=00:28:35"
+  "https://206-189-199-110.sslip.io/archivist/api/videos/vid_01M0TP1NKCFMAWPAQZ09PKN23S/frame?timestamp=00:28:35"
 ```
 
-The response includes `frameUrl`, which can be opened directly in a browser.
+Accepted timestamp formats:
+
+```text
+seconds      95
+MM:SS        28:35
+HH:MM:SS     00:28:35
+fractional   00:28:35.500
+```
+
+Example response:
+
+```json
+{
+  "videoId": "vid_01M0TP1NKCFMAWPAQZ09PKN23S",
+  "timestamp": "00:28:35.000",
+  "timestampMs": 1715000,
+  "frameId": "frame_01M0TP1ZZRVHSRDSADPABMQSZ7",
+  "frameUrl": "https://206-189-199-110.sslip.io/archivist/api/media/frames/vid_01M0TP1NKCFMAWPAQZ09PKN23S/001715000.jpg",
+  "cached": false
+}
+```
+
+Open `frameUrl` directly in a browser to see the image.
+
+If the same frame was already extracted, `cached` will be `true` and the API will return the existing URL.
+
+## 5. Open A Frame Image
+
+Frame image URLs are public/clickable:
+
+```text
+https://206-189-199-110.sslip.io/archivist/api/media/frames/{videoId}/{timestampMs}.jpg
+```
+
+Example:
+
+```text
+https://206-189-199-110.sslip.io/archivist/api/media/frames/vid_01M0TP1NKCFMAWPAQZ09PKN23S/001715000.jpg
+```
+
+These URLs return JPEG images.
+
+## Complete Example Workflow
+
+```bash
+export ARCHIVIST_API_TOKEN="PASTE_TOKEN_HERE"
+
+# 1. Confirm API is online.
+curl "https://206-189-199-110.sslip.io/archivist/api/health"
+
+# 2. Upload a meeting video.
+curl -H "Authorization: Bearer $ARCHIVIST_API_TOKEN" \
+  -F "meetingTitle=CH_Des Archivist" \
+  -F "meetingDate=2026-08-21" \
+  -F "source=box-download" \
+  -F "uploadedBy=Kwaku" \
+  -F "file=@/Users/kwaku/Downloads/260821 CH_Des Archivist - video.mp4;type=video/mp4" \
+  "https://206-189-199-110.sslip.io/archivist/api/videos"
+
+# 3. List videos later if you need to recover the videoId.
+curl "https://206-189-199-110.sslip.io/archivist/api/videos?limit=50"
+
+# 4. Request a frame from the chosen video.
+curl -H "Authorization: Bearer $ARCHIVIST_API_TOKEN" \
+  "https://206-189-199-110.sslip.io/archivist/api/videos/vid_01M0TP1NKCFMAWPAQZ09PKN23S/frame?timestamp=00:28:35"
+
+# 5. Open the frameUrl returned by step 4.
+```
+
+## Automation Integration
+
+An AI automation should use this flow:
+
+```text
+1. POST /videos with the MP4 file and metadata.
+2. Store the returned videoId.
+3. If the videoId is unknown later, call GET /videos and match by metadata.
+4. Call GET /videos/{videoId}/frame?timestamp=... with the bearer token.
+5. Use the returned frameUrl anywhere a clickable image link is needed.
+```
+
+Recommended upload metadata:
+
+```text
+meetingTitle  Clear human name, for example CH_Des Archivist
+meetingDate   Meeting date, not upload date
+source        box, zoom, drive, manual-upload, or automation name
+uploadedBy    Person or automation identity
+```
+
+## Current Known Uploaded Video
+
+The first real uploaded meeting video is:
+
+```text
+videoId: vid_01M0TP1NKCFMAWPAQZ09PKN23S
+displayName: CH_Des Archivist
+originalFilename: 260821 CH_Des Archivist - video.mp4
+meetingDate: 2026-08-21
+status: ready
+```
+
+Useful verified frame examples:
+
+```text
+00:26:40 -> Meeting Transcripts screen
+00:28:35 -> Meetings Log database
+00:49:23 -> Release Tracker
+00:51:54 -> Dashboard Creator/Editor wiki
+```
+
+## Error Codes
+
+Common API errors:
+
+```text
+401 unauthorized             Missing or wrong bearer token on protected endpoints
+413 upload_too_large         Uploaded MP4 exceeds configured max size
+415 unsupported_file_type    File is not an MP4
+400 invalid_timestamp        Timestamp is not seconds, MM:SS, or HH:MM:SS
+404 video_not_found          videoId does not exist
+409 video_not_ready          Video exists but is not ready for extraction
+500 frame_extraction_failed  ffmpeg could not extract the requested frame
+```
+
+Error responses use this shape:
+
+```json
+{
+  "detail": {
+    "error": "video_not_found",
+    "message": "Video was not found."
+  }
+}
+```
 
 ## Local Development
 
-Create `.env` from `.env.example`, then run:
+Create `.env` from `.env.example`.
+
+```bash
+cp .env.example .env
+```
+
+Update `.env` with real local values, then run:
 
 ```bash
 docker compose up -d --build
@@ -85,6 +337,12 @@ cd api
 python -m pytest -q
 ```
 
+The local API container listens on:
+
+```text
+http://127.0.0.1:8010
+```
+
 ## Deployment Notes
 
 The deployed VM copy lives at:
@@ -93,14 +351,37 @@ The deployed VM copy lives at:
 /opt/archivist
 ```
 
-The service joins the existing `chirpstack_default` Docker network so the existing Caddy container can proxy:
+The API runs in Docker Compose with:
+
+```text
+archivist-api       FastAPI + ffmpeg
+archivist-postgres  Postgres 16 metadata database
+```
+
+The existing Caddy container proxies:
 
 ```text
 /archivist/api/* -> archivist-api:8000
+```
+
+Media storage path on the VM:
+
+```text
+/opt/archivist/storage
 ```
 
 Real secrets belong only in `.env`; `.env` is intentionally ignored by Git.
 
 ## Engineering Docs
 
-See `docs/` for the planning, architecture, implementation, and deployment sign-off records.
+See `docs/` for planning, architecture, implementation, and deployment sign-off records.
+
+Important files:
+
+```text
+docs/stage-1-planning-signoff.md
+docs/stage-2-architecture-signoff.md
+docs/stage-3-implementation-signoff.md
+docs/stage-4-deployment-signoff.md
+docs/superpowers/plans/2026-08-24-archivist-media-system.md
+```
