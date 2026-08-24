@@ -32,8 +32,7 @@ GET  /archivist/api/media/frames/{videoId}/{timestampMs}.jpg
 Before requesting a frame, list the uploaded videos and choose the matching `videoId` from the metadata:
 
 ```bash
-curl -H "Authorization: Bearer $ARCHIVIST_API_TOKEN" \
-  "https://206-189-199-110.sslip.io/archivist/api/videos?limit=50"
+curl "https://206-189-199-110.sslip.io/archivist/api/videos?limit=50"
 ```
 
 Each item includes:

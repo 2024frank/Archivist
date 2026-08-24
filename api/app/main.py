@@ -81,10 +81,8 @@ async def upload_video(
 
 @app.get("/videos", response_model=list[VideoListItem])
 def list_videos(
-    authorization: str | None = Header(None),
     limit: int = Query(50, ge=1, le=200),
 ):
-    require_api_token(authorization)
     with SessionLocal() as db:
         videos = db.query(Video).order_by(Video.created_at.desc(), Video.id.desc()).limit(limit).all()
 

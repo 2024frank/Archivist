@@ -63,15 +63,6 @@ def test_upload_mp4_creates_video_record():
         assert Path(video.storage_path).exists()
 
 
-def test_list_videos_requires_bearer_token():
-    reset_database()
-    with TestClient(app) as client:
-        response = client.get("/videos")
-
-    assert response.status_code == 401
-    assert response.json()["detail"]["error"] == "unauthorized"
-
-
 def test_list_videos_returns_video_metadata():
     reset_database()
     with SessionLocal() as db:
@@ -91,7 +82,7 @@ def test_list_videos_returns_video_metadata():
         db.commit()
 
     with TestClient(app) as client:
-        response = client.get("/videos", headers={"Authorization": "Bearer test-token"})
+        response = client.get("/videos")
 
     assert response.status_code == 200
     assert response.json() == [
