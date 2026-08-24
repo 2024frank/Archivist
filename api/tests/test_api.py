@@ -1,3 +1,4 @@
+from datetime import date
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -60,6 +61,52 @@ def test_upload_mp4_creates_video_record():
         video = db.get(Video, body["videoId"])
         assert video is not None
         assert Path(video.storage_path).exists()
+
+
+def test_list_videos_requires_bearer_token():
+    reset_database()
+    with TestClient(app) as client:
+        response = client.get("/videos")
+
+    assert response.status_code == 401
+    assert response.json()["detail"]["error"] == "unauthorized"
+
+
+def test_list_videos_returns_video_metadata():
+    reset_database()
+    with SessionLocal() as db:
+        db.add(
+            Video(
+                id="vid_01M0TNASGK82R2QRCP1V1SS1EG",
+                canonical_name="2026-08-21-ch-des-archivist",
+                display_name="CH_Des Archivist",
+                original_filename="260821 CH_Des Archivist - video.mp4",
+                meeting_date=date(2026, 8, 21),
+                source="downloaded-video",
+                uploaded_by="Kwaku",
+                storage_path="/tmp/original.mp4",
+                status="ready",
+            )
+        )
+        db.commit()
+
+    with TestClient(app) as client:
+        response = client.get("/videos", headers={"Authorization": "Bearer test-token"})
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "videoId": "vid_01M0TNASGK82R2QRCP1V1SS1EG",
+            "canonicalName": "2026-08-21-ch-des-archivist",
+            "displayName": "CH_Des Archivist",
+            "originalFilename": "260821 CH_Des Archivist - video.mp4",
+            "meetingDate": "2026-08-21",
+            "source": "downloaded-video",
+            "uploadedBy": "Kwaku",
+            "status": "ready",
+            "createdAt": response.json()[0]["createdAt"],
+        }
+    ]
 
 
 def test_frame_request_extracts_then_uses_cache(monkeypatch):

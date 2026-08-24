@@ -21,9 +21,33 @@ https://206-189-199-110.sslip.io/archivist
 
 ```text
 GET  /archivist/api/health
+GET  /archivist/api/videos
 POST /archivist/api/videos
 GET  /archivist/api/videos/{videoId}/frame?timestamp=HH:MM:SS
 GET  /archivist/api/media/frames/{videoId}/{timestampMs}.jpg
+```
+
+## Find A Video ID
+
+Before requesting a frame, list the uploaded videos and choose the matching `videoId` from the metadata:
+
+```bash
+curl -H "Authorization: Bearer $ARCHIVIST_API_TOKEN" \
+  "https://206-189-199-110.sslip.io/archivist/api/videos?limit=50"
+```
+
+Each item includes:
+
+```text
+videoId
+canonicalName
+displayName
+originalFilename
+meetingDate
+source
+uploadedBy
+status
+createdAt
 ```
 
 ## Upload Example

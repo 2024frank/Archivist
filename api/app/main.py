@@ -2,7 +2,7 @@ from datetime import date
 from pathlib import Path
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, File, Form, Header, UploadFile
+from fastapi import FastAPI, File, Form, Header, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.exc import IntegrityError
 from ulid import ULID
@@ -14,7 +14,7 @@ from app.errors import api_error
 from app.media import extract_frame
 from app.models import Video, VideoFrame
 from app.naming import canonical_name
-from app.schemas import FrameResponse, VideoUploadResponse
+from app.schemas import FrameResponse, VideoListItem, VideoUploadResponse
 from app.storage import frame_dir, frame_filename, frame_public_url, video_dir
 from app.timestamps import format_timestamp, parse_timestamp
 
@@ -77,6 +77,31 @@ async def upload_video(
         db.commit()
 
     return VideoUploadResponse(videoId=video_id, canonicalName=slug, displayName=display_name, status="ready")
+
+
+@app.get("/videos", response_model=list[VideoListItem])
+def list_videos(
+    authorization: str | None = Header(None),
+    limit: int = Query(50, ge=1, le=200),
+):
+    require_api_token(authorization)
+    with SessionLocal() as db:
+        videos = db.query(Video).order_by(Video.created_at.desc(), Video.id.desc()).limit(limit).all()
+
+    return [
+        VideoListItem(
+            videoId=video.id,
+            canonicalName=video.canonical_name,
+            displayName=video.display_name,
+            originalFilename=video.original_filename,
+            meetingDate=video.meeting_date,
+            source=video.source,
+            uploadedBy=video.uploaded_by,
+            status=video.status,
+            createdAt=video.created_at,
+        )
+        for video in videos
+    ]
 
 
 @app.get("/videos/{video_id}/frame", response_model=FrameResponse)

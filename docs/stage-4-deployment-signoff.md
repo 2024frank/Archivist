@@ -35,6 +35,7 @@ Public base URL: https://206-189-199-110.sslip.io/archivist
 
 ```text
 GET  /archivist/api/health
+GET  /archivist/api/videos
 POST /archivist/api/videos
 GET  /archivist/api/videos/{videoId}/frame?timestamp=HH:MM:SS
 GET  /archivist/api/media/frames/{videoId}/{timestampMs}.jpg
