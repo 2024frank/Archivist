@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+tmp-vm/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.test-storage/
+.DS_Store
+/archivist-deploy.tgz
