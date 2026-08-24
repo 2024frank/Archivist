@@ -5,7 +5,11 @@ Archivist is a deployed API for uploading meeting videos and pulling still image
 The core workflow is:
 
 ```text
-Upload MP4 video -> receive videoId -> list videos when needed -> request frame by videoId + timestamp -> open returned frameUrl
+1. Upload an MP4 video.
+2. Get back a generated videoId.
+3. Later, call GET /videos to see all uploaded video metadata and identify the right videoId.
+4. Request a frame by passing videoId and timestamp to GET /videos/{videoId}/frame.
+5. Open the returned frameUrl.
 ```
 
 Production base URL:
@@ -68,6 +72,58 @@ When using the production deployment, prefix these paths with:
 https://206-189-199-110.sslip.io/archivist/api
 ```
 
+## How Users Normally Use It
+
+Most users should think about the system in three stages:
+
+```text
+Upload video -> Find the video record -> Retrieve a frame from that video
+```
+
+The important idea is that the timestamp is **not** passed to the image URL endpoint. The timestamp is passed to the protected frame-generation endpoint:
+
+```text
+GET /videos/{videoId}/frame?timestamp=00:28:35
+```
+
+That endpoint returns a `frameUrl`. The `frameUrl` points to the generated JPEG image:
+
+```text
+GET /media/frames/{videoId}/{frameFile}
+```
+
+So the two GET endpoints have different jobs:
+
+```text
+GET /videos
+Shows uploaded video metadata so users can choose the right videoId.
+
+GET /videos/{videoId}/frame?timestamp=...
+Creates or finds a frame for a specific video timestamp and returns frameUrl.
+
+GET /media/frames/{videoId}/{frameFile}
+Opens an already-created JPEG image. It does not accept timestamp.
+```
+
+Typical user flow:
+
+```text
+Step 1: Upload an MP4.
+Result: API returns videoId, canonicalName, displayName, and status.
+
+Step 2: List uploaded videos.
+Result: API returns all recent video metadata, including videoId, title, file name, meeting date, source, uploader, and status.
+
+Step 3: Pick the matching videoId.
+Example: choose the video where displayName is "CH_Des Archivist" and meetingDate is "2026-08-21".
+
+Step 4: Request the frame.
+Pass videoId in the URL path and timestamp as the query parameter.
+
+Step 5: Open the returned frameUrl.
+The frameUrl is a public JPEG link that can be clicked or shared.
+```
+
 ## 1. Check Health
 
 Use this to confirm the API is online:
@@ -85,49 +141,7 @@ Expected response:
 }
 ```
 
-## 2. Find A Video ID
-
-Before requesting a frame, list uploaded videos and choose the matching `videoId`.
-
-```bash
-curl "https://206-189-199-110.sslip.io/archivist/api/videos?limit=50"
-```
-
-Example response:
-
-```json
-[
-  {
-    "videoId": "vid_01M0TP1NKCFMAWPAQZ09PKN23S",
-    "canonicalName": "2026-08-21-ch-des-archivist",
-    "displayName": "CH_Des Archivist",
-    "originalFilename": "260821 CH_Des Archivist - video.mp4",
-    "meetingDate": "2026-08-21",
-    "source": "downloaded-video",
-    "uploadedBy": "Kwaku",
-    "status": "ready",
-    "createdAt": "2026-08-24T20:03:00Z"
-  }
-]
-```
-
-Use these fields to match the right video:
-
-```text
-videoId           Unique ID used for frame requests
-canonicalName     Normalized searchable name
-displayName       Human-readable title
-originalFilename  Original uploaded file name
-meetingDate       Meeting date if supplied
-source            Where the video came from
-uploadedBy        Person or automation that uploaded it
-status            ready, uploading, or failed
-createdAt         Upload record creation time
-```
-
-`limit` is optional. It defaults to `50` and can be between `1` and `200`.
-
-## 3. Upload An MP4 Video
+## 2. Upload An MP4 Video
 
 Only `.mp4` files are accepted.
 
@@ -170,6 +184,48 @@ Example upload response:
 ```
 
 Save the `videoId`. If you lose it, call `GET /videos` to find it again.
+
+## 3. Find A Video ID From Metadata
+
+Before requesting a frame, list uploaded videos and choose the matching `videoId`.
+
+```bash
+curl "https://206-189-199-110.sslip.io/archivist/api/videos?limit=50"
+```
+
+Example response:
+
+```json
+[
+  {
+    "videoId": "vid_01M0TP1NKCFMAWPAQZ09PKN23S",
+    "canonicalName": "2026-08-21-ch-des-archivist",
+    "displayName": "CH_Des Archivist",
+    "originalFilename": "260821 CH_Des Archivist - video.mp4",
+    "meetingDate": "2026-08-21",
+    "source": "downloaded-video",
+    "uploadedBy": "Kwaku",
+    "status": "ready",
+    "createdAt": "2026-08-24T20:03:00Z"
+  }
+]
+```
+
+Use these fields to match the right video:
+
+```text
+videoId           Unique ID used for frame requests
+canonicalName     Normalized searchable name
+displayName       Human-readable title
+originalFilename  Original uploaded file name
+meetingDate       Meeting date if supplied
+source            Where the video came from
+uploadedBy        Person or automation that uploaded it
+status            ready, uploading, or failed
+createdAt         Upload record creation time
+```
+
+`limit` is optional. It defaults to `50` and can be between `1` and `200`.
 
 ## 4. Request A Frame URL
 
@@ -221,6 +277,12 @@ https://206-189-199-110.sslip.io/archivist/api/media/frames/vid_01M0TP1NKCFMAWPA
 ```
 
 These URLs return JPEG images.
+
+Do not pass timestamps to this endpoint. This endpoint only opens a frame file that already exists. To choose a timestamp, use:
+
+```text
+GET /videos/{videoId}/frame?timestamp=00:28:35
+```
 
 ## Complete Example Workflow
 
