@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Archivist Media API documentation for uploading meeting videos, finding video IDs, and retrieving clickable frame URLs."
+    />
+    <title>Archivist Docs | Media API</title>
+    <link rel="icon" href="./assets/communityhub-logo.jpeg" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="#top" aria-label="Archivist docs home">
+        <img src="./assets/communityhub-logo.jpeg" alt="CommunityHub logo" />
+        <span>
+          <strong>Archivist</strong>
+          <small>Documentation</small>
+        </span>
+      </a>
+      <nav aria-label="Docs sections">
+        <a href="#workflow">Workflow</a>
+        <a href="#endpoints">Endpoints</a>
+        <a href="#examples">Examples</a>
+        <a href="#errors">Errors</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Current Section</p>
+          <h1>Media API</h1>
+          <p class="lead">
+            Upload meeting videos, list video metadata to find the right video ID,
+            and retrieve clickable frame images from specific timestamps.
+          </p>
+          <div class="hero-actions" aria-label="Primary links">
+            <a class="button primary" href="#quickstart">Use the API</a>
+            <a class="button secondary" href="https://github.com/2024frank/Archivist">GitHub</a>
+          </div>
+        </div>
+        <aside class="api-card" aria-label="CommunityHub API details">
+          <p class="card-label">CommunityHub API Base</p>
+          <code id="api-base">https://206-189-199-110.sslip.io/archivist/api</code>
+          <button class="copy-button" data-copy-target="api-base">Copy</button>
+          <dl>
+            <div>
+              <dt>Status</dt>
+              <dd>Deployed</dd>
+            </div>
+            <div>
+              <dt>Video Format</dt>
+              <dd>MP4</dd>
+            </div>
+            <div>
+              <dt>Frame Format</dt>
+              <dd>JPEG URL</dd>
+            </div>
+          </dl>
+        </aside>
+      </section>
+
+      <section id="workflow" class="section">
+        <div class="section-heading">
+          <p class="eyebrow">Normal User Flow</p>
+          <h2>How People Use It</h2>
+          <p>
+            Users should not guess video IDs. They upload a video, list metadata,
+            choose the right record, then request the frame they need.
+          </p>
+        </div>
+
+        <div class="steps">
+          <article>
+            <span>1</span>
+            <h3>Upload MP4</h3>
+            <p>Send a meeting video and optional metadata. The API returns a generated <code>videoId</code>.</p>
+          </article>
+          <article>
+            <span>2</span>
+            <h3>List Videos</h3>
+            <p>Call the public metadata endpoint to see uploaded videos and match the correct record.</p>
+          </article>
+          <article>
+            <span>3</span>
+            <h3>Request Frame</h3>
+            <p>Pass <code>videoId</code> in the path and <code>timestamp</code> as a query parameter.</p>
+          </article>
+          <article>
+            <span>4</span>
+            <h3>Open URL</h3>
+            <p>Use the returned <code>frameUrl</code> as the clickable image link.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="quickstart" class="section split">
+        <div>
+          <p class="eyebrow">Timestamp Rule</p>
+          <h2>Where The Timestamp Goes</h2>
+          <p>
+            The timestamp is passed to the frame-generation endpoint, not to the
+            image endpoint.
+          </p>
+          <p>
+            Use <code>GET /videos/{videoId}/frame?timestamp=00:28:35</code>.
+            The response gives you a <code>frameUrl</code>, which points to
+            <code>/media/frames/{videoId}/{frameFile}</code>.
+          </p>
+        </div>
+        <pre><code>GET /videos/{videoId}/frame?timestamp=00:28:35
+
+Response:
+{
+  "videoId": "vid_...",
+  "timestamp": "00:28:35.000",
+  "frameUrl": "https://.../media/frames/...jpg",
+  "cached": false
+}</code></pre>
+      </section>
+
+      <section id="endpoints" class="section">
+        <div class="section-heading">
+          <p class="eyebrow">Endpoint Reference</p>
+          <h2>Media API Endpoints</h2>
+        </div>
+
+        <div class="endpoint-grid">
+          <article class="endpoint public">
+            <span>Public</span>
+            <h3>GET /videos</h3>
+            <p>Lists uploaded videos and metadata so users can find the correct <code>videoId</code>.</p>
+          </article>
+          <article class="endpoint protected">
+            <span>Bearer Token</span>
+            <h3>POST /videos</h3>
+            <p>Uploads an MP4 file and returns the generated video record.</p>
+          </article>
+          <article class="endpoint protected">
+            <span>Bearer Token</span>
+            <h3>GET /videos/{videoId}/frame</h3>
+            <p>Creates or returns a frame for a specific timestamp.</p>
+          </article>
+          <article class="endpoint public">
+            <span>Public</span>
+            <h3>GET /media/frames/{videoId}/{frameFile}</h3>
+            <p>Opens an already-generated JPEG image. This endpoint does not accept timestamps.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="examples" class="section examples">
+        <div class="section-heading">
+          <p class="eyebrow">Copyable Calls</p>
+          <h2>Examples</h2>
+        </div>
+
+        <article class="code-panel">
+          <div>
+            <h3>List Video Metadata</h3>
+            <p>No token required.</p>
+          </div>
+          <pre><code id="list-call">curl "https://206-189-199-110.sslip.io/archivist/api/videos?limit=50"</code></pre>
+          <button class="copy-button" data-copy-target="list-call">Copy</button>
+        </article>
+
+        <article class="code-panel">
+          <div>
+            <h3>Upload A Video</h3>
+            <p>Requires <code>Authorization: Bearer &lt;token&gt;</code>.</p>
+          </div>
+          <pre><code id="upload-call">curl -H "Authorization: Bearer $ARCHIVIST_API_TOKEN" \
+  -F "meetingTitle=CH_Des Archivist" \
+  -F "meetingDate=2026-08-21" \
+  -F "source=box-download" \
+  -F "uploadedBy=Kwaku" \
+  -F "file=@/path/to/meeting.mp4;type=video/mp4" \
+  "https://206-189-199-110.sslip.io/archivist/api/videos"</code></pre>
+          <button class="copy-button" data-copy-target="upload-call">Copy</button>
+        </article>
+
+        <article class="code-panel">
+          <div>
+            <h3>Retrieve A Frame</h3>
+            <p>The timestamp is the query parameter.</p>
+          </div>
+          <pre><code id="frame-call">curl -H "Authorization: Bearer $ARCHIVIST_API_TOKEN" \
+  "https://206-189-199-110.sslip.io/archivist/api/videos/vid_01M0TP1NKCFMAWPAQZ09PKN23S/frame?timestamp=00:28:35"</code></pre>
+          <button class="copy-button" data-copy-target="frame-call">Copy</button>
+        </article>
+      </section>
+
+      <section class="section">
+        <div class="section-heading">
+          <p class="eyebrow">Known Video</p>
+          <h2>First Uploaded Meeting</h2>
+        </div>
+        <div class="metadata-table" role="table" aria-label="Known uploaded video metadata">
+          <div role="row">
+            <strong role="cell">videoId</strong>
+            <code role="cell">vid_01M0TP1NKCFMAWPAQZ09PKN23S</code>
+          </div>
+          <div role="row">
+            <strong role="cell">displayName</strong>
+            <span role="cell">CH_Des Archivist</span>
+          </div>
+          <div role="row">
+            <strong role="cell">originalFilename</strong>
+            <span role="cell">260821 CH_Des Archivist - video.mp4</span>
+          </div>
+          <div role="row">
+            <strong role="cell">meetingDate</strong>
+            <span role="cell">2026-08-21</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="errors" class="section">
+        <div class="section-heading">
+          <p class="eyebrow">Troubleshooting</p>
+          <h2>Common Errors</h2>
+        </div>
+        <div class="error-list">
+          <p><code>401 unauthorized</code> Missing or wrong bearer token on protected endpoints.</p>
+          <p><code>413 upload_too_large</code> Uploaded MP4 exceeds configured max size.</p>
+          <p><code>415 unsupported_file_type</code> File is not an MP4.</p>
+          <p><code>400 invalid_timestamp</code> Timestamp is not seconds, MM:SS, or HH:MM:SS.</p>
+          <p><code>404 video_not_found</code> The requested video ID does not exist.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <span>Archivist Docs</span>
+      <a href="https://github.com/2024frank/Archivist">GitHub Repository</a>
+    </footer>
+
+    <script src="./script.js"></script>
+  </body>
+</html>
