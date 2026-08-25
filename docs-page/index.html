@@ -8,13 +8,13 @@
       content="Archivist Media API documentation for uploading meeting videos, finding video IDs, and retrieving clickable frame URLs."
     />
     <title>Archivist Docs | Media API</title>
-    <link rel="icon" href="./assets/communityhub-logo.jpeg" />
+    <link rel="icon" href="./assets/communityhub-logo.png" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <header class="topbar">
       <a class="brand" href="#top" aria-label="Archivist docs home">
-        <img src="./assets/communityhub-logo.jpeg" alt="CommunityHub logo" />
+        <img src="./assets/communityhub-logo.png" alt="CommunityHub logo" />
         <span>
           <strong>Archivist</strong>
           <small>Documentation</small>
@@ -131,22 +131,22 @@ Response:
         <div class="endpoint-grid">
           <article class="endpoint public">
             <span>Public</span>
-            <h3>GET /videos</h3>
+            <h3><b>GET</b> <code>/videos</code></h3>
             <p>Lists uploaded videos and metadata so users can find the correct <code>videoId</code>.</p>
           </article>
           <article class="endpoint protected">
             <span>Bearer Token</span>
-            <h3>POST /videos</h3>
+            <h3><b>POST</b> <code>/videos</code></h3>
             <p>Uploads an MP4 file and returns the generated video record.</p>
           </article>
           <article class="endpoint protected">
             <span>Bearer Token</span>
-            <h3>GET /videos/{videoId}/frame</h3>
+            <h3><b>GET</b> <code>/videos/{videoId}/frame</code></h3>
             <p>Creates or returns a frame for a specific timestamp.</p>
           </article>
           <article class="endpoint public">
             <span>Public</span>
-            <h3>GET /media/frames/{videoId}/{frameFile}</h3>
+            <h3><b>GET</b> <code>/media/frames/{videoId}/{frameFile}</code></h3>
             <p>Opens an already-generated JPEG image. This endpoint does not accept timestamps.</p>
           </article>
         </div>
