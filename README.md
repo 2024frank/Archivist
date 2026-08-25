@@ -54,7 +54,7 @@ Uploading videos and generating frame URLs require:
 Authorization: Bearer <ARCHIVIST_API_TOKEN>
 ```
 
-The real token is stored in `.env` on the local machine and on the VM. Do not commit or paste the real token into GitHub.
+Use the configured `ARCHIVIST_API_TOKEN` value for the environment where the API is running.
 
 ## Endpoints
 
@@ -432,7 +432,7 @@ Media storage path on the VM:
 /opt/archivist/storage
 ```
 
-Real secrets belong only in `.env`; `.env` is intentionally ignored by Git.
+Use private deployment configuration for environment-specific credentials.
 
 ## Engineering Docs
 
