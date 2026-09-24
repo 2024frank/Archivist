@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -9,19 +9,32 @@ from ulid import ULID
 
 from app.auth import require_api_token
 from app.config import get_settings
-from app.database import SessionLocal, init_db
+from app.database import SessionLocal, init_db, run_migrations
 from app.errors import api_error
 from app.media import extract_frame
 from app.models import Video, VideoFrame
 from app.naming import canonical_name
-from app.schemas import FrameResponse, VideoListItem, VideoUploadResponse
-from app.storage import frame_dir, frame_filename, frame_public_url, video_dir
+from app.schemas import (
+    FrameResponse,
+    VideoListItem,
+    VideoStatusResponse,
+    VideoStatusUpdate,
+    VideoUploadResponse,
+)
+from app.storage import (
+    delete_video_file,
+    frame_dir,
+    frame_filename,
+    frame_public_url,
+    video_dir,
+)
 from app.timestamps import format_timestamp, parse_timestamp
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    run_migrations()
     yield
 
 
@@ -102,6 +115,52 @@ def list_videos(
     ]
 
 
+@app.put("/videos/{video_id}/status", response_model=VideoStatusResponse)
+def set_video_status(
+    video_id: str,
+    payload: VideoStatusUpdate,
+    authorization: str | None = Header(None),
+):
+    """Mark a video completed and delete its source file.
+
+    Completing a video is final. The stored .mp4 is removed to reclaim disk space,
+    while the video's metadata and any frames already extracted are kept so existing
+    frameUrl links keep working. No new frames can be extracted afterwards.
+    """
+    require_api_token(authorization)
+
+    with SessionLocal() as db:
+        video = db.get(Video, video_id)
+        if not video:
+            raise api_error(404, "video_not_found", "Video was not found.")
+
+        frames_retained = db.query(VideoFrame).filter_by(video_id=video_id).count()
+
+        if video.status == "completed":
+            return VideoStatusResponse(
+                videoId=video_id,
+                status=video.status,
+                videoDeleted=False,
+                bytesFreed=0,
+                framesRetained=frames_retained,
+                completedAt=video.completed_at,
+            )
+
+        bytes_freed = delete_video_file(video_id)
+        video.status = "completed"
+        video.completed_at = datetime.now(timezone.utc)
+        db.commit()
+
+        return VideoStatusResponse(
+            videoId=video_id,
+            status=video.status,
+            videoDeleted=True,
+            bytesFreed=bytes_freed,
+            framesRetained=frames_retained,
+            completedAt=video.completed_at,
+        )
+
+
 @app.get("/videos/{video_id}/frame", response_model=FrameResponse)
 def get_frame(video_id: str, timestamp: str, authorization: str | None = Header(None)):
     require_api_token(authorization)
@@ -114,6 +173,8 @@ def get_frame(video_id: str, timestamp: str, authorization: str | None = Header(
         video = db.get(Video, video_id)
         if not video:
             raise api_error(404, "video_not_found", "Video was not found.")
+        if video.status == "completed":
+            raise api_error(410, "video_completed", "Video was completed and its source file was deleted.")
         if video.status != "ready":
             raise api_error(409, "video_not_ready", "Video is not ready for frame extraction.")
 

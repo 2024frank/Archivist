@@ -144,6 +144,11 @@ Response:
             <h3><b>GET</b> <code>/videos/{videoId}/frame</code></h3>
             <p>Creates or returns a frame for a specific timestamp.</p>
           </article>
+          <article class="endpoint protected">
+            <span>Bearer Token</span>
+            <h3><b>PUT</b> <code>/videos/{videoId}/status</code></h3>
+            <p>Marks a video completed and deletes its source MP4. Metadata and frames already extracted are kept.</p>
+          </article>
           <article class="endpoint public">
             <span>Public</span>
             <h3><b>GET</b> <code>/media/frames/{videoId}/{frameFile}</code></h3>
@@ -191,6 +196,18 @@ Response:
   "https://206-189-199-110.sslip.io/archivist/api/videos/vid_01M0TP1NKCFMAWPAQZ09PKN23S/frame?timestamp=00:28:35"</code></pre>
           <button class="copy-button" data-copy-target="frame-call">Copy</button>
         </article>
+
+        <article class="code-panel">
+          <div>
+            <h3>Complete And Delete</h3>
+            <p>Frees the disk space used by the source video. This cannot be undone.</p>
+          </div>
+          <pre><code id="complete-call">curl -X PUT -H "Authorization: Bearer $ARCHIVIST_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "completed"}' \
+  "https://206-189-199-110.sslip.io/archivist/api/videos/vid_01M0TP1NKCFMAWPAQZ09PKN23S/status"</code></pre>
+          <button class="copy-button" data-copy-target="complete-call">Copy</button>
+        </article>
       </section>
 
       <section class="section">
@@ -229,6 +246,7 @@ Response:
           <p><code>415 unsupported_file_type</code> File is not an MP4.</p>
           <p><code>400 invalid_timestamp</code> Timestamp is not seconds, MM:SS, or HH:MM:SS.</p>
           <p><code>404 video_not_found</code> The requested video ID does not exist.</p>
+          <p><code>410 video_completed</code> The video was completed and its source file was deleted.</p>
         </div>
       </section>
     </main>

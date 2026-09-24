@@ -20,12 +20,13 @@ class Video(Base):
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String, index=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     frames: Mapped[list["VideoFrame"]] = relationship(back_populates="video", cascade="all, delete-orphan")
 
-    __table_args__ = (CheckConstraint("status IN ('uploading', 'ready', 'failed')", name="videos_status_check"),)
+    __table_args__ = (CheckConstraint("status IN ('uploading', 'ready', 'failed', 'completed')", name="videos_status_check"),)
 
 
 class VideoFrame(Base):

@@ -1,5 +1,7 @@
 from datetime import date, datetime
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -29,3 +31,16 @@ class FrameResponse(BaseModel):
     frameId: str
     frameUrl: str
     cached: bool
+
+
+class VideoStatusUpdate(BaseModel):
+    status: Literal["completed"]
+
+
+class VideoStatusResponse(BaseModel):
+    videoId: str
+    status: str
+    videoDeleted: bool
+    bytesFreed: int
+    framesRetained: int
+    completedAt: datetime | None

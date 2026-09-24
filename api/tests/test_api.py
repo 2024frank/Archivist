@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from app.database import Base, SessionLocal, engine
 from app.main import app, health
 from app.models import Video
-from app.storage import frame_filename, video_dir
+from app.storage import frame_filename, storage_root, video_dir
 
 
 def test_health_response():
@@ -149,3 +149,118 @@ def test_frame_request_requires_bearer_token():
 
     assert response.status_code == 401
     assert response.json()["detail"]["error"] == "unauthorized"
+
+
+def seed_ready_video(video_id: str, payload: bytes = b"fake-video-bytes") -> Path:
+    video_path = video_dir(video_id) / "original.mp4"
+    video_path.write_bytes(payload)
+    with SessionLocal() as db:
+        db.add(
+            Video(
+                id=video_id,
+                canonical_name="2026-08-21-ch-des-archivist",
+                display_name="CH_Des Archivist",
+                original_filename="meeting.mp4",
+                storage_path=str(video_path),
+                status="ready",
+            )
+        )
+        db.commit()
+    return video_path
+
+
+def test_complete_video_deletes_source_and_keeps_metadata():
+    reset_database()
+    video_id = "vid_01M0TNASGK82R2QRCP1V1SS1CMP"
+    payload = b"x" * 2048
+    video_path = seed_ready_video(video_id, payload)
+
+    with TestClient(app) as client:
+        response = client.put(
+            f"/videos/{video_id}/status",
+            headers={"Authorization": "Bearer test-token"},
+            json={"status": "completed"},
+        )
+        listed = client.get("/videos")
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body["status"] == "completed"
+    assert body["videoDeleted"] is True
+    assert body["bytesFreed"] == len(payload)
+    assert body["completedAt"] is not None
+    assert not video_path.exists()
+    assert not (storage_root() / "videos" / video_id).exists()
+    assert [item["videoId"] for item in listed.json()] == [video_id]
+    assert listed.json()[0]["status"] == "completed"
+
+
+def test_complete_video_is_idempotent():
+    reset_database()
+    video_id = "vid_01M0TNASGK82R2QRCP1V1SS1IDE"
+    seed_ready_video(video_id)
+
+    with TestClient(app) as client:
+        headers = {"Authorization": "Bearer test-token"}
+        first = client.put(f"/videos/{video_id}/status", headers=headers, json={"status": "completed"})
+        second = client.put(f"/videos/{video_id}/status", headers=headers, json={"status": "completed"})
+
+    assert first.json()["videoDeleted"] is True
+    assert second.status_code == 200
+    assert second.json()["videoDeleted"] is False
+    assert second.json()["bytesFreed"] == 0
+    assert second.json()["status"] == "completed"
+
+
+def test_completed_video_rejects_new_frame_requests():
+    reset_database()
+    video_id = "vid_01M0TNASGK82R2QRCP1V1SS1GON"
+    seed_ready_video(video_id)
+
+    with TestClient(app) as client:
+        headers = {"Authorization": "Bearer test-token"}
+        client.put(f"/videos/{video_id}/status", headers=headers, json={"status": "completed"})
+        frame = client.get(f"/videos/{video_id}/frame", headers=headers, params={"timestamp": "00:01:00"})
+
+    assert frame.status_code == 410
+    assert frame.json()["detail"]["error"] == "video_completed"
+
+
+def test_complete_video_requires_bearer_token():
+    reset_database()
+    with TestClient(app) as client:
+        response = client.put(
+            "/videos/vid_01M0TNASGK82R2QRCP1V1SS1EG/status",
+            json={"status": "completed"},
+        )
+
+    assert response.status_code == 401
+    assert response.json()["detail"]["error"] == "unauthorized"
+
+
+def test_complete_unknown_video_returns_404():
+    reset_database()
+    with TestClient(app) as client:
+        response = client.put(
+            "/videos/vid_does_not_exist/status",
+            headers={"Authorization": "Bearer test-token"},
+            json={"status": "completed"},
+        )
+
+    assert response.status_code == 404
+    assert response.json()["detail"]["error"] == "video_not_found"
+
+
+def test_complete_rejects_unsupported_status_value():
+    reset_database()
+    video_id = "vid_01M0TNASGK82R2QRCP1V1SS1BAD"
+    seed_ready_video(video_id)
+
+    with TestClient(app) as client:
+        response = client.put(
+            f"/videos/{video_id}/status",
+            headers={"Authorization": "Bearer test-token"},
+            json={"status": "archived"},
+        )
+
+    assert response.status_code == 422

@@ -43,6 +43,7 @@ GET /media/frames/{videoId}/{frameFile}
 
 Bearer token required:
 POST /videos
+PUT /videos/{videoId}/status
 GET /videos/{videoId}/frame
 ```
 
@@ -62,6 +63,7 @@ Use the configured `ARCHIVIST_API_TOKEN` value for the environment where the API
 GET  /health
 GET  /videos
 POST /videos
+PUT  /videos/{videoId}/status
 GET  /videos/{videoId}/frame?timestamp=HH:MM:SS
 GET  /media/frames/{videoId}/{timestampMs}.jpg
 ```
@@ -311,6 +313,59 @@ curl -H "Authorization: Bearer $ARCHIVIST_API_TOKEN" \
 # 5. Open the frameUrl returned by step 4.
 ```
 
+## Completing a Video
+
+Once you have pulled every frame you need, mark the video completed. This deletes the
+stored `.mp4` and reclaims the disk space it used on the VM.
+
+```text
+PUT /videos/{videoId}/status
+Authorization: Bearer <ARCHIVIST_API_TOKEN>
+Content-Type: application/json
+
+{"status": "completed"}
+```
+
+The only accepted value is `completed`. Any other value returns 422.
+
+What completing does and does not remove:
+
+```text
+Deleted      The original .mp4 file on the VM filesystem.
+Kept         The video record returned by GET /videos, now with status "completed".
+Kept         Every frame already extracted, so existing frameUrl links keep working.
+```
+
+Example response:
+
+```json
+{
+  "videoId": "vid_01M1YBV2WX63B8RZ7NJCR04B9D",
+  "status": "completed",
+  "videoDeleted": true,
+  "bytesFreed": 734003200,
+  "framesRetained": 4,
+  "completedAt": "2026-09-24T14:02:11.482913Z"
+}
+```
+
+Completing is final and cannot be undone through the API. Pull every frame you need
+first, because no new frame can be extracted once the source file is gone. A later
+frame request for a completed video returns 410 `video_completed`.
+
+The call is idempotent. Completing an already completed video returns 200 with
+`videoDeleted` set to `false` and `bytesFreed` set to `0`, so a retry is safe.
+
+Example:
+
+```bash
+curl -X PUT \
+  -H "Authorization: Bearer $ARCHIVIST_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "completed"}' \
+  "https://206-189-199-110.sslip.io/archivist/api/videos/vid_01M1YBV2WX63B8RZ7NJCR04B9D/status"
+```
+
 ## Automation Integration
 
 An AI automation should use this flow:
@@ -321,6 +376,7 @@ An AI automation should use this flow:
 3. If the videoId is unknown later, call GET /videos and match by metadata.
 4. Call GET /videos/{videoId}/frame?timestamp=... with the bearer token.
 5. Use the returned frameUrl anywhere a clickable image link is needed.
+6. When no further frames are needed, PUT status completed to delete the source video.
 ```
 
 Recommended upload metadata:
@@ -364,6 +420,8 @@ Common API errors:
 400 invalid_timestamp        Timestamp is not seconds, MM:SS, or HH:MM:SS
 404 video_not_found          videoId does not exist
 409 video_not_ready          Video exists but is not ready for extraction
+410 video_completed         Video was completed and its source file was deleted
+422 validation_error        Request body status value is not "completed"
 500 frame_extraction_failed  ffmpeg could not extract the requested frame
 ```
 
